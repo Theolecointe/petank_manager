@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "Team": {
+      "title": "Team",
+      "description": "A team participating in the tournament",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "player1": { "type": "string" },
+        "player2": { "type": "string" },
+        "email": { "type": "string" },
+        "pin": { "type": "string" }
+      },
+      "required": ["id", "name", "pin"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "A match between two teams",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "poolName": { "type": "string" },
+        "team1": { "type": "string" },
+        "team2": { "type": "string" },
+        "score1": { "type": "number", "type_nullable": true },
+        "score2": { "type": "number", "type_nullable": true },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "type", "poolName", "team1", "team2", "status"]
+    },
+    "State": {
+      "title": "State",
+      "description": "Global tournament state (pools and bracket)",
+      "type": "object",
+      "properties": {
+        "pools": { "type": "object" },
+        "bracket": { "type": "object", "type_nullable": true }
+      }
+    }
+  },
+  "firestore": {
+    "/teams/{teamId}": {
+      "schema": { "$ref": "#/entities/Team" },
+      "description": "Stores all teams"
+    },
+    "/matches/{matchId}": {
+      "schema": { "$ref": "#/entities/Match" },
+      "description": "Stores all matches"
+    },
+    "/state/main": {
+      "schema": { "$ref": "#/entities/State" },
+      "description": "Singleton storing global bracket and pool structures"
+    }
+  }
+}

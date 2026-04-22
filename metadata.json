@@ -1,0 +1,6 @@
+{
+  "name": "Pétanque Manager Pro",
+  "description": "Back office et gestionnaire de tournoi de pétanque. Gestion des équipes, poules et phases finales.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

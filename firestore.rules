@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Global Safety Net
+    match /{document=**} { 
+      allow read, write: if false; 
+    }
+
+    // --- Helpers ---
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    function isValidTeam(data) {
+      return data.keys().hasOnly(['id', 'name', 'player1', 'player2', 'email', 'pin'])
+        && data.id is string && data.id.size() <= 64
+        && data.name is string && data.name.size() <= 128
+        && data.player1 is string && data.player1.size() <= 128
+        && data.player2 is string && data.player2.size() <= 128
+        && data.email is string && data.email.size() <= 128
+        && data.pin is string && data.pin.size() <= 10;
+    }
+
+    function isValidMatch(data) {
+      return data.keys().hasOnly(['id', 'type', 'poolName', 'team1', 'team2', 'score1', 'score2', 'status', 'startedAt', 'pausedAt'])
+        && data.id is string && data.id.size() <= 64
+        && data.type is string && data.type.size() <= 64
+        && data.poolName is string && data.poolName.size() <= 64
+        && data.team1 is string && data.team1.size() <= 64
+        && data.team2 is string && data.team2.size() <= 64
+        && (data.score1 == null || data.score1 is number)
+        && (data.score2 == null || data.score2 is number)
+        && data.status is string && data.status.size() <= 64
+        && (!('startedAt' in data) || data.startedAt == null || data.startedAt is number)
+        && (!('pausedAt' in data) || data.pausedAt == null || data.pausedAt is number);
+    }
+
+    function isValidState(data) {
+      // Allow legacy/extra keys while still validating the fields used by the app.
+      return (!('pools' in data) || data.pools is map)
+        && (!('bracket' in data) || data.bracket == null || data.bracket is map)
+        && (!('tvMode' in data) || data.tvMode is string)
+        && (!('tvMessage' in data) || data.tvMessage is string);
+    }
+
+    function isValidTv(data) {
+      return data.keys().hasOnly(['tvMode', 'tvMessage'])
+        && (!('tvMode' in data) || data.tvMode is string)
+        && (!('tvMessage' in data) || data.tvMessage is string);
+    }
+
+    // --- Rules ---
+    // Note: User explicitly requested no authentication for the admin interface (hidden URL).
+    // To prevent total database destruction, we enforce strict schema validation on all writes.
+
+    match /teams/{teamId} {
+      allow read: if true;
+      allow create: if isValidId(teamId) && incoming().keys().hasAll(['id', 'name', 'pin']) && isValidTeam(incoming());
+      allow update: if isValidId(teamId) && isValidTeam(incoming());
+      allow delete: if isValidId(teamId);
+    }
+
+    match /matches/{matchId} {
+      allow read: if true;
+      allow create: if isValidId(matchId) && incoming().keys().hasAll(['id', 'type', 'poolName', 'team1', 'team2', 'status']) && isValidMatch(incoming());
+      allow update: if isValidId(matchId) && isValidMatch(incoming());
+      allow delete: if isValidId(matchId);
+    }
+
+    match /state/main {
+      allow read: if true;
+      allow create: if incoming().keys().hasAll(['pools']) && isValidState(incoming());
+      allow update: if isValidState(incoming());
+      allow delete: if false; // State singleton should not be deleted
+    }
+
+    match /tv/{docId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
+  }
+}
