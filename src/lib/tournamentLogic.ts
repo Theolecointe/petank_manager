@@ -13,6 +13,7 @@ export async function executeGeneratePools(teams: any[], matches: any[], pools: 
   const newPools: any = {};
   
   let currentPoolCharCode = 65; // 'A'
+  let currentTerrain = 1;
   
   for (let i = 0; i < shuffled.length; i += teamsPerPool) {
     const chunk = shuffled.slice(i, i + teamsPerPool);
@@ -32,8 +33,10 @@ export async function executeGeneratePools(teams: any[], matches: any[], pools: 
           score1: null,
           score2: null,
           status: "pending",
-          startedAt: null
+          startedAt: null,
+          terrain: currentTerrain
         });
+        currentTerrain = currentTerrain >= 12 ? 1 : currentTerrain + 1;
       }
     }
     currentPoolCharCode++;
@@ -110,6 +113,7 @@ export async function executeGenerateBracket(teams: any[], matches: any[], pools
   let numMatches = bracketSize / 2;
   let currentRoundId = bracketSize;
   let maxId = 1;
+  let currentTerrain = 1;
 
   while (numMatches >= 1) {
     let roundArr = [];
@@ -124,8 +128,10 @@ export async function executeGenerateBracket(teams: any[], matches: any[], pools
             status: "pending",
             startedAt: null,
             nextMatchId: null,
-            nextSlot: null
+            nextSlot: null,
+            terrain: currentTerrain
         });
+        currentTerrain = currentTerrain >= 12 ? 1 : currentTerrain + 1;
     }
     roundsMatches.push(roundArr);
     currentRoundId /= 2;

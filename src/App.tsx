@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter, Routes, Route, NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, NavLink, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Trophy, Users, LayoutGrid, Settings, Swords, Trash2, Plus, RefreshCw, Hand, Upload, Check } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -8,9 +8,26 @@ import { db } from './lib/firebase';
 import { collection, doc, setDoc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { executeGeneratePools as doGeneratePools, executeGenerateBracket as doGenerateBracket, advanceBracketMatch, resetBracketMatch } from './lib/tournamentLogic';
 
+function TitleUpdater() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/admin')) {
+      document.title = 'Manager';
+    } else if (location.pathname === '/tv') {
+      document.title = 'TV';
+    } else {
+      document.title = 'Tournoi de pétanque';
+    }
+  }, [location.pathname]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
+      <TitleUpdater />
       <Toaster position="top-right" />
       <Routes>
         <Route path="/" element={<PublicView />} />
@@ -174,6 +191,7 @@ function TeamsView() {
   const [newP2, setNewP2] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [teamToDelete, setTeamToDelete] = useState<string | null>(null);
+  const [sendingEmails, setSendingEmails] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addTeam = async (e: React.FormEvent) => {
@@ -298,6 +316,46 @@ function TeamsView() {
     if(fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const sendEmailsBatch = async () => {
+    const teamsWithEmail = teams.filter(t => t.email && t.email.trim() !== '');
+    
+    if (teamsWithEmail.length === 0) {
+      toast.error("Aucune équipe avec adresse email trouvée");
+      return;
+    }
+
+    setSendingEmails(true);
+    try {
+      const appUrl = window.location.origin;
+      const response = await fetch('/api/sendEmails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teams: teamsWithEmail,
+          appUrl: appUrl
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erreur lors de l\'envoi');
+      }
+
+      toast.success(`✅ ${result.sent} emails envoyés!`);
+      
+      if (result.errors && result.errors.length > 0) {
+        console.warn('Erreurs lors de l\'envoi:', result.errors);
+        toast.error(`⚠️ ${result.failed} email(s) échoué(s). Voir console.`);
+      }
+    } catch (error: any) {
+      console.error('Erreur d\'envoi:', error);
+      toast.error(`Erreur: ${error.message}`);
+    } finally {
+      setSendingEmails(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <ConfirmModal 
@@ -326,6 +384,13 @@ function TeamsView() {
             className="bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-md text-xs font-semibold border border-slate-300 transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
           >
             <Upload size={14} /> Importer
+          </button>
+          <button 
+            onClick={sendEmailsBatch}
+            disabled={sendingEmails || teams.length === 0}
+            className="bg-blue-500 hover:bg-blue-600 disabled:bg-slate-300 text-white px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-2 shadow-sm cursor-pointer border-none"
+          >
+            {sendingEmails ? '📧 Envoi...' : '📧 Envoyer identifiants'}
           </button>
           <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-md font-medium text-slate-600 text-xs shadow-sm">
             <span className="font-bold text-slate-900">{teams.length}</span> équipes
@@ -854,6 +919,13 @@ function MatchRow({ match, team1, team2, onSave, onReset, onStart, onStop, onPau
         </div>
         <span className="font-medium text-slate-700 truncate flex-1 text-left" title={team2.name}>{team2.name}</span>
       </div>
+      {match.terrain && (
+        <div className="flex justify-center">
+          <span className="inline-flex items-center px-3.5 py-1 rounded-full bg-blue-100 text-blue-700 text-sm font-black uppercase tracking-widest border border-blue-300 shadow-sm">
+            🏐 Terrain {match.terrain}
+          </span>
+        </div>
+      )}
       
       {isFinished && !isEditing && (
         <button onClick={() => setIsEditing(true)} className="w-full text-[10px] font-medium text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-0.5 rounded transition-colors text-center cursor-pointer flex items-center justify-center gap-1">
@@ -1523,6 +1595,13 @@ function PublicView() {
                                    </div>
                                    <span className={`flex-1 truncate text-left ${t2Won ? 'font-bold text-slate-900' : isFin ? 'text-slate-500' : 'font-medium text-slate-700'}`}>{t2.name}</span>
                                  </div>
+                                 {m.terrain && (
+                                   <div className="flex justify-center -mt-0.5 relative z-10">
+                                     <span className="inline-flex items-center px-4 py-1.5 rounded-full bg-blue-100 text-blue-700 text-base font-black uppercase tracking-widest border-2 border-blue-300 shadow-md">
+                                       🏐 Terrain {m.terrain}
+                                     </span>
+                                   </div>
+                                 )}
                                  
                                  {isNextMatch && (
                                    <button onClick={() => startMatch(m.id)} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg text-xs transition-colors border-none cursor-pointer mt-1 relative z-10">
@@ -1535,16 +1614,16 @@ function PublicView() {
                                      <div className="text-xs font-bold text-slate-700 text-center mb-1">Fin du match - Entrez le score</div>
                                      <div className="flex gap-2 items-center">
                                         <div className="flex-1 text-right text-xs font-bold text-slate-800 truncate pr-2">{t1.name}</div>
-                                        <input type="number" 
-                                           value={scoreInput.s1} 
-                                           onChange={e => setScoreInput({...scoreInput, s1: e.target.value})} 
+                                         <input type="number" 
+                                           value={scoreInput?.s1 ?? ''} 
+                                           onChange={e => setScoreInput(prev => prev ? { ...prev, s1: e.target.value } : prev)} 
                                            className="w-12 h-10 text-center font-bold text-lg rounded-md border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" 
                                            placeholder="0" 
                                         />
                                         <span className="font-bold text-slate-400">:</span>
-                                        <input type="number" 
-                                           value={scoreInput.s2} 
-                                           onChange={e => setScoreInput({...scoreInput, s2: e.target.value})} 
+                                         <input type="number" 
+                                           value={scoreInput?.s2 ?? ''} 
+                                           onChange={e => setScoreInput(prev => prev ? { ...prev, s2: e.target.value } : prev)} 
                                            className="w-12 h-10 text-center font-bold text-lg rounded-md border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" 
                                            placeholder="0" 
                                         />
@@ -1640,6 +1719,13 @@ function PublicView() {
                          </div>
                          <span className={`flex-1 truncate text-left ${t2Won ? 'font-bold text-slate-900' : isFin ? 'text-slate-500' : 'font-medium text-slate-700'}`}>{t2.name}</span>
                        </div>
+                       {m.terrain && (
+                         <div className="flex justify-center -mt-0.5 relative z-10">
+                           <span className="inline-flex items-center px-4 py-1.5 rounded-full bg-blue-100 text-blue-700 text-base font-black uppercase tracking-widest border-2 border-blue-300 shadow-md">
+                             🏐 Terrain {m.terrain}
+                           </span>
+                         </div>
+                       )}
                        
                        {isNextMatch && (
                          <button onClick={() => startMatch(m.id)} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg text-xs transition-colors border-none cursor-pointer mt-1 relative z-10">
@@ -1653,15 +1739,15 @@ function PublicView() {
                            <div className="flex gap-2 items-center">
                               <div className="flex-1 text-right text-xs font-bold text-slate-800 truncate pr-2">{t1.name}</div>
                               <input type="number" 
-                                 value={scoreInput.s1} 
-                                 onChange={e => setScoreInput({...scoreInput, s1: e.target.value})} 
+                                value={scoreInput?.s1 ?? ''} 
+                                onChange={e => setScoreInput(prev => prev ? { ...prev, s1: e.target.value } : prev)} 
                                  className="w-12 h-10 text-center font-bold text-lg rounded-md border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" 
                                  placeholder="0" 
                               />
                               <span className="font-bold text-slate-400">:</span>
                               <input type="number" 
-                                 value={scoreInput.s2} 
-                                 onChange={e => setScoreInput({...scoreInput, s2: e.target.value})} 
+                                value={scoreInput?.s2 ?? ''} 
+                                onChange={e => setScoreInput(prev => prev ? { ...prev, s2: e.target.value } : prev)} 
                                  className="w-12 h-10 text-center font-bold text-lg rounded-md border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" 
                                  placeholder="0" 
                               />
@@ -1811,6 +1897,13 @@ function TvDisplayView() {
                                 </div>
                               </div>
                             </div>
+                            {m.terrain && (
+                              <div className="px-3 py-2.5 border-t border-white/10 bg-blue-500/10 flex justify-center">
+                                <span className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-blue-500/20 text-blue-200 text-sm font-black uppercase tracking-widest border border-blue-400/60 shadow-lg shadow-blue-500/20">
+                                  🏐 Terrain {m.terrain}
+                                </span>
+                              </div>
+                            )}
                             {(isPlaying || isPaused) && (
                               <div className="px-3 py-1.5 bg-black/40 border-t border-white/5 flex items-center justify-between">
                                 <div className="flex items-center gap-2">
@@ -1919,6 +2012,13 @@ function TvDisplayView() {
                                  <span className="px-2 font-black text-slate-600 text-[9px] uppercase">vs</span>
                                  <span className="truncate flex-1 text-left font-medium">{getTeam(match.team2).name}</span>
                               </div>
+                              {match.terrain && (
+                                <div className="flex justify-center mb-2 pl-2">
+                                  <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-500/20 text-blue-200 text-xs font-black uppercase tracking-widest border border-blue-400/60">
+                                    🏐 Terrain {match.terrain}
+                                  </span>
+                                </div>
+                              )}
                               <div className="flex justify-center items-center gap-2 bg-black/40 rounded p-1 mx-2 border border-white/5">
                                  <div className={`w-1.5 h-1.5 rounded-full ${match.status === 'paused' ? 'bg-amber-500' : 'bg-red-500 animate-pulse shadow-[0_0_5px_rgba(239,68,68,0.8)]'}`}></div>
                                  <MatchTimer startedAt={match.startedAt} pausedAt={match.pausedAt} status={match.status} className={`font-bold bg-transparent px-0 py-0 ${match.status === 'paused' ? 'text-amber-400' : 'text-blue-400'}`} />
