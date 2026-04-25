@@ -58,6 +58,16 @@ function AdminAuthGuard() {
 }
 
 function Sidebar() {
+  const [debugMode, setDebugMode] = useState(() => 
+    localStorage.getItem('debugMode') === 'true'
+  );
+
+  const toggleDebug = () => {
+    const newState = !debugMode;
+    setDebugMode(newState);
+    localStorage.setItem('debugMode', String(newState));
+  };
+
   const navItems = [
     { to: "/admin/teams", icon: <Users size={18} />, label: "Gestion Équipes" },
     { to: "/admin/pools", icon: <LayoutGrid size={18} />, label: "Phase de Poules" },
@@ -93,8 +103,21 @@ function Sidebar() {
         </ul>
       </nav>
       
-      <div className="mt-auto p-5 text-[11px] opacity-50">
-        Status: Connecté (JSON local)
+      <div className="mt-auto p-3 space-y-3 border-t border-white/10">
+        <button 
+          onClick={toggleDebug}
+          className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-xs font-semibold transition-all border ${
+            debugMode 
+              ? 'bg-red-900/40 text-red-300 border-red-500/50 hover:bg-red-900/60' 
+              : 'bg-slate-800/50 text-slate-400 border-slate-700 hover:bg-slate-800'
+          }`}
+          title={debugMode ? "Debug mode ACTIVÉ" : "Debug mode désactivé"}
+        >
+          🔧 {debugMode ? 'DEBUG ON' : 'DEBUG OFF'}
+        </button>
+        <div className="text-[11px] opacity-50">
+          Status: Connecté (JSON local)
+        </div>
       </div>
     </div>
   );
@@ -701,12 +724,14 @@ function PoolsView() {
           <p className="text-xs text-slate-500 m-0">{teams.length} équipes inscrites • {matches.filter(m => m.status === 'finished').length} matchs terminés</p>
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            onClick={simulatePoolMatches}
-            className="bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1.5 rounded-md font-bold text-[11px] transition-colors shadow-sm ml-2"
-          >
-            🧪 SIMULER MATCHS
-          </button>
+          {typeof window !== 'undefined' && localStorage.getItem('debugMode') === 'true' && (
+            <button 
+              onClick={simulatePoolMatches}
+              className="bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1.5 rounded-md font-bold text-[11px] transition-colors shadow-sm ml-2"
+            >
+              🧪 SIMULER MATCHS
+            </button>
+          )}
           <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase">En cours</span>
           <div className="flex items-center gap-3">
             <div className="flex items-center bg-slate-50 border border-slate-200 px-2 py-1 rounded-md text-xs">
@@ -1155,7 +1180,7 @@ function BracketView() {
           </h1>
           <p className="text-xs text-slate-500 m-0">Phase à élimination directe.</p>
         </div>
-        {hasBracket && (
+        {hasBracket && typeof window !== 'undefined' && localStorage.getItem('debugMode') === 'true' && (
           <button 
             onClick={simulateBracketMatches}
             className="bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1.5 rounded-md font-bold text-[11px] transition-colors shadow-sm"
