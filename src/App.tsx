@@ -66,6 +66,7 @@ function Sidebar() {
     const newState = !debugMode;
     setDebugMode(newState);
     localStorage.setItem('debugMode', String(newState));
+    console.log('Debug mode:', newState ? 'ACTIVÉ' : 'DÉSACTIVÉ');
   };
 
   const navItems = [
@@ -103,20 +104,21 @@ function Sidebar() {
         </ul>
       </nav>
       
-      <div className="mt-auto p-3 space-y-3 border-t border-white/10">
+      <div className="mt-auto p-4 space-y-3 border-t border-white/10">
         <button 
           onClick={toggleDebug}
-          className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-xs font-semibold transition-all border ${
+          className={`w-full flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-sm font-bold transition-all border-2 ${
             debugMode 
-              ? 'bg-red-900/40 text-red-300 border-red-500/50 hover:bg-red-900/60' 
-              : 'bg-slate-800/50 text-slate-400 border-slate-700 hover:bg-slate-800'
+              ? 'bg-red-500/20 text-red-200 border-red-500 hover:bg-red-500/30 shadow-lg shadow-red-500/20' 
+              : 'bg-slate-700/30 text-slate-300 border-slate-600 hover:bg-slate-700/50'
           }`}
           title={debugMode ? "Debug mode ACTIVÉ" : "Debug mode désactivé"}
         >
-          🔧 {debugMode ? 'DEBUG ON' : 'DEBUG OFF'}
+          <span className={debugMode ? 'animate-pulse text-lg' : 'text-lg'}>🔧</span>
+          {debugMode ? 'DEBUG ON' : 'DEBUG OFF'}
         </button>
-        <div className="text-[11px] opacity-50">
-          Status: Connecté (JSON local)
+        <div className="text-[11px] text-slate-500 text-center">
+          {debugMode && <span className="inline-block px-2 py-1 bg-red-500/20 text-red-300 rounded border border-red-500/50 text-xs font-bold">🟥 ACTIF</span>}
         </div>
       </div>
     </div>
