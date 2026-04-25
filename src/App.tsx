@@ -703,9 +703,17 @@ function PoolsView() {
         existingPools[targetPool].push(teamToAddId);
         await updateDoc(doc(db, 'state', 'main'), { pools: existingPools });
         
-        // Générer les matchs entre la nouvelle équipe et les autres
+        // Supprimer les anciens matchs de cette poule
         const batch = writeBatch(db);
-        const otherTeams = existingPools[targetPool].filter((id: string) => id !== teamToAddId);
+        const existingMatches = matches.filter((m: any) => m.poolName === targetPool);
+        existingMatches.forEach((m: any) => {
+          batch.delete(doc(db, 'matches', m.id));
+        });
+        await batch.commit();
+        
+        // Régénérer TOUS les matchs de cette poule (Round-Robin)
+        const batch2 = writeBatch(db);
+        const teamsInPool = existingPools[targetPool];
         
         // Trouver le dernier terrain utilisé
         let nextTerrain = 1;
@@ -714,27 +722,29 @@ function PoolsView() {
           nextTerrain = lastTerrain >= 12 ? 1 : lastTerrain + 1;
         }
         
-        // Créer les matchs
-        for (const otherTeamId of otherTeams) {
-          const mId = generateId();
-          batch.set(doc(db, 'matches', mId), {
-            id: mId,
-            type: "pool",
-            poolName: targetPool,
-            team1: teamToAddId,
-            team2: otherTeamId,
-            score1: null,
-            score2: null,
-            status: "pending",
-            startedAt: null,
-            terrain: nextTerrain
-          });
-          nextTerrain = nextTerrain >= 12 ? 1 : nextTerrain + 1;
+        // Créer tous les matchs (Round-Robin)
+        for (let i = 0; i < teamsInPool.length; i++) {
+          for (let j = i + 1; j < teamsInPool.length; j++) {
+            const mId = generateId();
+            batch2.set(doc(db, 'matches', mId), {
+              id: mId,
+              type: "pool",
+              poolName: targetPool,
+              team1: teamsInPool[i],
+              team2: teamsInPool[j],
+              score1: null,
+              score2: null,
+              status: "pending",
+              startedAt: null,
+              terrain: nextTerrain
+            });
+            nextTerrain = nextTerrain >= 12 ? 1 : nextTerrain + 1;
+          }
         }
         
-        await batch.commit();
+        await batch2.commit();
         
-        toast.success(`Équipe ajoutée à la poule ${targetPool}. ${otherTeams.length} matchs créés.`);
+        toast.success(`Équipe ajoutée à la poule ${targetPool}. Matchs régénérés !`);
         setTeamToAddId(null);
         setTargetPoolName(null);
         setConfirmAction(null);
