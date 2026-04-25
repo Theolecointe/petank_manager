@@ -522,7 +522,9 @@ function TeamsView() {
 function PoolsView() {
   const { state: { teams, pools, matches, bracket }, loading } = useTournament();
   const [teamsPerPool, setTeamsPerPool] = useState(4);
-  const [confirmAction, setConfirmAction] = useState<{type: 'generate'|'reset'|'generate_bracket'|'stop', id?: string} | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{type: 'generate'|'reset'|'generate_bracket'|'stop'|'add_team_to_pool', id?: string} | null>(null);
+  const [teamToAddId, setTeamToAddId] = useState<string | null>(null);
+  const [targetPoolName, setTargetPoolName] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const generatePools = async () => {
@@ -672,6 +674,53 @@ function PoolsView() {
     }
   };
 
+  const addTeamToPool = async () => {
+    if (!teamToAddId) return;
+    
+    const existingPools = { ...pools };
+    let targetPool = targetPoolName;
+    
+    // Chercher une poule incomplète
+    if (!targetPool) {
+      for (const poolName of Object.keys(existingPools)) {
+        if (existingPools[poolName].length < teamsPerPool) {
+          targetPool = poolName;
+          break;
+        }
+      }
+    }
+    
+    // Si aucune poule incomplète, créer une nouvelle
+    if (!targetPool) {
+      const newPoolNum = Math.max(...Object.keys(existingPools).map(p => parseInt(p)), 0) + 1;
+      targetPool = String(newPoolNum);
+      existingPools[targetPool] = [];
+    }
+    
+    try {
+      // Ajouter l'équipe à la poule
+      if (!existingPools[targetPool].includes(teamToAddId)) {
+        existingPools[targetPool].push(teamToAddId);
+        await updateDoc(doc(db, 'state', 'main'), { pools: existingPools });
+        
+        // Regénérer les matchs de cette poule
+        const batch = writeBatch(db);
+        const existingMatches = matches.filter((m: any) => m.poolName === targetPool);
+        existingMatches.forEach((m: any) => {
+          batch.delete(doc(db, 'matches', m.id));
+        });
+        await batch.commit();
+        
+        toast.success(`Équipe ajoutée à la poule ${targetPool}. Les matchs ont été régénérés.`);
+        setTeamToAddId(null);
+        setTargetPoolName(null);
+        setConfirmAction(null);
+      }
+    } catch (e: any) {
+      toast.error("Erreur: " + e.message);
+    }
+  };
+
   const getTeam = (id: string) => teams.find(t => t.id === id) || { name: 'Inconnu' };
 
   const simulatePoolMatches = async () => {
@@ -703,10 +752,83 @@ function PoolsView() {
 
   const poolNames = Object.keys(pools || {}).sort();
 
+  // Équipes non encore assignées à une poule
+  const assignedTeamIds = new Set(Object.values(pools || {}).flat());
+  const unassignedTeams = teams.filter(t => !assignedTeamIds.has(t.id));
+
   return (
     <div className="flex flex-col h-full">
+      {/* Modal d'ajout d'équipe à une poule */}
+      {confirmAction?.type === 'add_team_to_pool' && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[1px] flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-8 rounded-xl shadow-xl max-w-md w-full">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">Ajouter une équipe à une poule</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Sélectionner une équipe</label>
+                <select 
+                  value={teamToAddId || ''}
+                  onChange={e => setTeamToAddId(e.target.value || null)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">-- Choisir une équipe --</option>
+                  {unassignedTeams.map(team => (
+                    <option key={team.id} value={team.id}>{team.name}</option>
+                  ))}
+                </select>
+                {unassignedTeams.length === 0 && (
+                  <p className="text-xs text-slate-500 mt-2">✅ Toutes les équipes sont déjà assignées à une poule!</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Poule cible (optionnel)</label>
+                <select 
+                  value={targetPoolName || ''}
+                  onChange={e => setTargetPoolName(e.target.value || null)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">-- Auto (première poule incomplète ou nouvelle poule) --</option>
+                  {poolNames.map(poolName => {
+                    const poolSize = pools[poolName].length;
+                    const isFull = poolSize >= teamsPerPool;
+                    return (
+                      <option key={poolName} value={poolName}>
+                        Poule {poolName} ({poolSize}/{teamsPerPool}) {isFull ? '(pleine)' : '(incomplète)'}
+                      </option>
+                    );
+                  })}
+                  <option value="__NEW__">➕ Créer une nouvelle poule</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button 
+                onClick={() => {
+                  setConfirmAction(null);
+                  setTeamToAddId(null);
+                  setTargetPoolName(null);
+                }}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition-colors border-none cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button 
+                onClick={addTeamToPool}
+                disabled={!teamToAddId}
+                className="px-4 py-2 text-sm font-medium bg-green-500 hover:bg-green-600 disabled:bg-slate-300 text-white rounded-md transition-colors border-none cursor-pointer"
+              >
+                Ajouter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <ConfirmModal 
-        isOpen={!!confirmAction} 
+        isOpen={!!confirmAction && confirmAction.type !== 'add_team_to_pool'} 
         title={confirmAction?.type === 'generate' ? "Générer les poules" : confirmAction?.type === 'generate_bracket' ? "Générer le tableau final" : confirmAction?.type === 'stop' ? "Arrêter le chronomètre" : "Réinitialiser le match"}
         message={
           confirmAction?.type === 'generate' 
@@ -749,6 +871,14 @@ function PoolsView() {
                 <option value={6}>6</option>
               </select>
             </div>
+            {Object.keys(pools || {}).length > 0 && (
+              <button 
+                onClick={() => setConfirmAction({ type: 'add_team_to_pool' })}
+                className="bg-green-500 text-white px-3 py-1.5 rounded-md font-medium text-[13px] flex items-center gap-2 hover:bg-green-600 transition-colors border-none cursor-pointer"
+              >
+                ➕ Ajouter équipe
+              </button>
+            )}
             <button 
               onClick={generatePools}
               className="bg-blue-500 text-white px-3 py-1.5 rounded-md font-medium text-[13px] flex items-center gap-2 hover:bg-blue-600 transition-colors border-none cursor-pointer"
